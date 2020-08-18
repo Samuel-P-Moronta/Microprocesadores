@@ -3,9 +3,6 @@
 
 /*
     NOMBRE     : SAMUEL P. MORONTA 
-    MATRICULA  : 2017-0570
-    ID         : 10131492
-    
 */
 
 /*Prototipo de funciones */
