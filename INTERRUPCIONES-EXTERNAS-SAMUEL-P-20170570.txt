@@ -1,0 +1,257 @@
+#include "stm32f10x.h"
+#include "stdint.h"
+
+/* SAMUEL P. MORONTA
+   2017-0570/10131492
+*/
+typedef enum{
+	RISING_EDGE,
+	FALLING_EDGE,
+	RISING_FALLING_EDGE
+}edge_select;
+/*A UTILIZAR EN EL PROGRAMA, DEFINES*/
+#define FI  0x44444444
+#define OP  0x22222222
+#define OFF 0x00000000
+#define MAX 5000
+#define NUMBER 2000
+
+/* Protototipos de funnciones */
+void readReg(void);
+void SetUpInterrupt(GPIO_TypeDef *port, uint32_t pinNumber, edge_select edge);
+void enableInt(uint32_t pinNumber, IRQn_Type irqNumber);
+void clearInterrupt(uint32_t pinNumber);
+
+
+/*Para las interrupciones */
+void EXTI1_IRQHandler(void);
+void EXTI2_IRQHandler(void);
+void EXTI3_IRQHandler(void);
+void EXTI4_IRQHandler(void);
+void EXTI5_IRQHandler(void);
+
+unsigned int i = 0; 
+/*Variables para generar las 5 interrupciones */
+unsigned int VAR_1=0;
+unsigned int VAR_2=0;
+unsigned int VAR_3=0;
+unsigned int VAR_4=0;
+unsigned int VAR_5=0;
+
+char binarray[5];
+
+int main(void)
+{
+	readReg();
+	/*Seteando las interrupciones */
+	unsigned int typePin = 0;
+	/*Registro A linea de interupcion 1*/
+	SetUpInterrupt(GPIOA,1,RISING_EDGE);
+	/*Registro B linea de interupcion 2*/
+	SetUpInterrupt(GPIOB,2,RISING_EDGE);
+	/*Registro C linea de interupcion 3*/
+	SetUpInterrupt(GPIOC,3,RISING_EDGE);
+	/*Registro B linea de interupcion 0*/
+	SetUpInterrupt(GPIOB,0,RISING_EDGE);
+	/*Registro C linea de interupcion 3*/
+	SetUpInterrupt(GPIOB,3,RISING_EDGE);
+
+	/*Habilitando las interrupciones */
+	enableInt(1,EXTI1_IRQn);	
+	enableInt(2,EXTI2_IRQn);
+	enableInt(3,EXTI3_IRQn);
+	enableInt(0,EXTI0_IRQn);
+	enableInt(1,EXTI1_IRQn);
+	/*Limpiando las interrupciones */
+	clearInterrupt(1);
+	clearInterrupt(2);	
+	clearInterrupt(3);	
+	clearInterrupt(0); 	
+	clearInterrupt(1);
+
+	
+	while(1) {
+		GPIOD->ODR = 0x00000000;
+		}
+}
+
+void readReg(void){
+
+	 RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
+	 RCC->APB2ENR |= RCC_APB2ENR_IOPBEN;
+	/*
+	  Configurando los registros para utilizarlos
+	  como entrada de 3 puertos 
+	*/
+	 GPIOA->CRH = FI;
+   	 GPIOA->CRL = FI;
+	 
+	 GPIOB->CRH = FI;
+	 GPIOB->CRL = FI;
+	 
+	 GPIOC->CRH = FI;
+	 GPIOC->CRL = FI;
+	 
+	 /*Para presentarlo en el Desplay */
+	 GPIOD->CRH = OP;
+	 GPIOD->CRL = OP;
+	 
+	 /*Resetear los pines para que esten 
+	   apagados en el Display
+	 */
+	 GPIOD->ODR = OFF;
+}
+
+/* Funcion explicada en clases por los integrantes
+   de la exposicion *EXTI y EVENTOS* Samuel P. Moronta
+   Y Juan De Peña para setear los registros para las
+   interrupciones 
+*/
+
+void SetUpInterrupt(GPIO_TypeDef *port, uint32_t pinNumber, edge_select edge){
+	
+	/* Habilitar funcion alterna */
+	RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;
+	/* Puerto A */
+	if(port == GPIOA){
+		switch(pinNumber){
+			/* PA[0] pin */
+			case 0: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI0_PA; break;
+			case 1: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PA; break;
+			case 2: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI2_PA; break;
+			case 3: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI3_PA; break;
+			/* PA[1] pin */
+			case 4: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI4_PA; break;
+			case 5: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI5_PA; break;
+			case 6: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI6_PA; break;	
+			case 7: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI7_PA; break;	
+			/* PA[2] pin */
+			case 8: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI8_PA; break;	
+			case 9: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI9_PA; break;	
+			case 10:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI10_PA; break;
+			case 11:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI11_PA; break;
+			/* PA[3] pin */
+			case 12:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI12_PA; break;
+			case 13:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI13_PA; break;
+			case 14:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI14_PA; break;
+			case 15:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI15_PA; break;			
+			}
+	}
+	/* Puerto B */
+	if(port == GPIOB){
+		switch(pinNumber){
+			/* PB[0] pin */
+			case 0: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI0_PB; break;
+			case 1: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PB; break;
+			case 2: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI2_PB; break;
+			case 3: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI3_PB; break;
+			/* PB[1] pin */
+			case 4: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI4_PB; break;
+			case 5: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI5_PB; break;
+			case 6: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI6_PB; break;	
+			case 7: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI7_PB; break;	
+			/* PB[2] pin */
+			case 8: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI8_PB; break;				
+			case 9: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI9_PB; break;	
+			case 10:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI10_PB; break;
+			case 11:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI11_PB; break;
+			/* PB[3] pin */
+			case 12:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI12_PB; break;
+			case 13:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI13_PB; break;
+			case 14:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI14_PB; break;
+			case 15:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI15_PB; break;			
+			}
+	}
+	/* Puerto C */
+	if(port == GPIOC){
+		switch(pinNumber){
+			case 0: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI0_PC; break;
+			case 1: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI1_PC; break;
+			case 2: AFIO->EXTICR[0] = AFIO_EXTICR1_EXTI2_PC; break;
+			case 3: AFIO->EXTICR[1] = AFIO_EXTICR1_EXTI3_PC; break;
+			
+			case 4: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI4_PC; break;
+			case 5: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI5_PC; break;
+			case 6: AFIO->EXTICR[1] = AFIO_EXTICR2_EXTI6_PC; break;	
+			case 7: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI8_PC; break;	
+			
+			case 8: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI9_PC; break;
+			case 9: AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI9_PC; break;
+			case 10:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI10_PC; break;
+			case 11:AFIO->EXTICR[2] = AFIO_EXTICR3_EXTI11_PC; break;
+			
+			case 12:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI12_PC; break;
+			case 13:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI13_PC; break;
+			case 14:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI14_PC; break;
+			case 15:AFIO->EXTICR[3] = AFIO_EXTICR4_EXTI15_PC; break;			
+			}
+	}
+	/* Ascendente o descendente */
+	if(edge == RISING_EDGE){
+		/* Rising Trigger selection register */
+		/* Shifft entre 1 y el ping elegido */
+		EXTI->RTSR |= 1 << pinNumber;
+	}
+	if(edge == FALLING_EDGE){
+		/* Falling Trigger selection register */
+		/* Shifft entre 1 y el ping elegido */
+
+		EXTI->FTSR |= 1 << pinNumber;
+	}
+	if(edge == RISING_FALLING_EDGE){
+		EXTI->FTSR |= 1 << pinNumber;
+		EXTI->RTSR |= 1 << pinNumber;		
+	}
+}
+void enableInt(uint32_t pinNumber, IRQn_Type irqNumber){
+	/* Habilitando interrupcion en el EXTI */
+	EXTI ->IMR |= 1<<pinNumber;
+	/* Habilitar interrupcion en el NVIC */
+	NVIC_EnableIRQ(irqNumber);
+}
+
+void clearInterrupt(uint32_t pinNumber){
+	/* Clear the pending request interrupt indicator */
+	EXTI->PR |= 1<< pinNumber;
+}
+/*Interrupcion 1*/	
+void EXTI1_IRQHandler(){
+	
+	for(i = 0; i < MAX; i++){
+		i = NUMBER;
+	}
+	VAR_1++;
+}
+/*Interrupcion 2*/	
+void EXTI2_IRQHandler(){
+	
+	for(i = 0; i < MAX; i++){
+		i = NUMBER;
+	}
+	VAR_2++;
+}
+/*Interrupcion 3*/	
+void EXTI3_IRQHandler(){
+	
+	for(i = 0; i < MAX; i++){
+		i = NUMBER;
+	}
+	VAR_3++;
+}
+/*Interrupcion 4*/	
+void EXTI4_IRQHandler(){
+	for(i = 0; i < MAX; i++){
+		i = NUMBER;
+	}
+	VAR_4++;
+}
+/*Interrupcion 5*/	
+void EXTI5_IRQHandler(){
+	
+	for(i = 0; i < MAX; i++){
+		i = NUMBER;
+	}
+	VAR_5++;
+}
+
+   

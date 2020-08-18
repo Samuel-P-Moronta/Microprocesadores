@@ -1,0 +1,175 @@
+#include "stm32f10x.h"
+#include <stdbool.h>
+//=============================================================================
+/*
+ SAMUEL P. MORONTA
+ ID : 20170570/10131492
+
+*/
+//=============================================================================
+
+/*Prototype of functions */
+
+
+void timerConfiRegisterSetup(void);
+void delay_timer(unsigned int num);
+void adcSetup(void);
+void ADC1_IRQHandler(void);
+void segmentPresent(volatile uint32_t E, unsigned int T[]);
+void changeDisplay(void);
+
+//_____________________________________________________________________________________
+/*A utilizar a lo largo del programa*/
+#define PIN_0 0x00000001
+#define PIN_8 0x00000100
+#define PIN_15 0x00008000
+#define PIN_15_8 0x00008100
+#define DECENA 
+//_____________________________________________________________________________________
+unsigned int numArr[10] =    
+    {
+    /* Catodo comun */
+    0b0111111,
+    0b0000110,
+    0b1011011,
+    0b1000110,
+    0b1100110,
+    0b1101101,
+    0b1111101,
+    0b1111000,
+    0b1111111,
+    0b1100111,
+    };
+
+int main(void) {
+    unsigned int typePin = 0; 
+    unsigned int control = 0; 
+    uint32_t num = 0; 
+
+    timerConfiRegisterSetup(); 
+    adcSetup();
+    while(1){
+        if(GPIOB -> IDR & PIN_0) {
+            control = 1;
+        }
+        do{
+            if(typePin == 0){
+                for(unsigned int i = 0; i < 10; i ++){
+                    delay_timer(100);
+                    segmentPresent(num, numArr[i]);
+                }
+                    typePin == 1;
+            }
+            while(typePin == 1){
+                  for(unsigned int i = 0; i < 10; i++){
+                      delay_timer(100);
+                      segmentPresent(num, numArr[i]);
+                    }
+                    typePin == 2;
+             }
+             while(typePin == 2){
+                   for(unsigned int i = 0; i < 10; i++){
+                       delay_timer(100);
+                       segmentPresent(num, numArr[i]);
+                   }
+             }
+                    typePin == 0;
+                
+        }while(control == 1);
+    }  
+}
+
+
+void timerConfiRegisterSetup(void){
+
+    /*  
+        Calculos realizados 
+        Datos: T = 100ms, f = 1/t = 1/25ms = 10hz
+    
+        f = 72,000/ARR*PSC
+        Tomando como ARR = 160 y despejando PSC
+    
+        PSC = 72,000,000/160*10 = 45000
+    */
+
+    RCC -> APB2ENR |= RCC_APB2ENR_IOPAEN; /*Habilito el relog del puerto A*/
+    RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN; /*Habilito el relog del puerto A*/
+    RCC -> APB1ENR |= RCC_APB1ENR_TIM3EN; /*Habilito el relog del timer 4 A*/
+    
+    AFIO->MAPR |= AFIO_MAPR_TIM1_REMAP_PARTIALREMAP;
+    
+    GPIOA->CRL = 0x22222222; /* 8 pines del puerto A parte Baja*/
+    GPIOA->CRH = 0x22222222; /* 8 pines del puerto A parte Alta*/
+    GPIOA->ODR = 0x00000001; /* Para que inicie en el PIN 1*/
+    
+    GPIOB->CRL = 0x44444444;  /* PIN 1 y PIN 2 parte baja */
+    GPIOB->CRH = 0x44444444;  /* PIN 1 y PIN 2 parte alta */
+    
+    GPIOC->CRL = 0x44444444;  /* PIN 1 y PIN 2 parte baja */
+    GPIOC->CRH = 0x44444444;  /* PIN 1 y PIN 2 parte alta */
+    
+    GPIOD->CRL = 0x44444444;  /* PIN 1 y PIN 2 parte baja */
+    GPIOD->CRH = 0x44444444;  /* PIN 1 y PIN 2 parte alta */
+    
+
+    TIM3->PSC = 45000; /*Set prescale to max 20000*/
+    TIM3->ARR = 160; /*Auto reload value 90*/
+    TIM3->CR1 |= TIM_CR1_CEN; /*Enable timer*/
+}
+void adcSetup(void){
+
+    RCC->APB2ENR|=RCC_APB2ENR_AFIOEN;
+    RCC->APB2ENR|=RCC_APB2ENR_ADC1EN;
+    /* Wait Delay with 500 */
+    delay_timer(500);
+    ADC1->CR1=0x0000000000;
+    ADC1->CR2=0x0000000055;
+    /* Wait Delay with 500 */
+    delay_timer(500);
+    
+    ADC1->SMPR1=0x00000000;
+    ADC1->SMPR2=0x00000000;
+    ADC1->CR2|=0x000000001;
+    /* Wait Delay with 500 */
+    delay_timer(500);
+
+}
+void delay_timer(unsigned int num) {
+    unsigned int counter = 0;
+    timerConfiRegisterSetup();
+
+    while(counter < num) {
+        /* Loop until the update event flag is set */
+        while(!(TIM3->SR & TIM_SR_UIF));
+        counter++;
+    }
+    TIM3->CR1 &= ~TIM_CR1_CEN;
+}
+void segmentPresent(volatile uint32_t E, unsigned int T[]){                                                                                                                // numero x en los displays
+
+    /* Particionar los numeros  para obtener los lugares 
+       correspondientes
+       Ej: E = 15
+       hundred = 15/100 = 0.15
+    
+    */
+    unsigned int hundred = E / 100;
+    unsigned int decency = (E - hundred * 100)/10;
+    unsigned int unit = (E - hundred * 100 - decency *10);
+    
+    /*Unidad */
+    uint32_t un = T[unit];
+    /* Descena */
+    uint32_t dec = T[decency];
+    /* Centena */
+    uint32_t hund = T[hundred];
+    /* Change display 7 segment << 8 */
+     
+    /* Present to GPIOA-> ODR unit */
+    GPIOA -> ODR = un << 8 | dec;
+    /* Present to GPIOC-> ODR dec */
+    GPIOC -> ODR = dec << 8| hundred; 
+    /* Present to GPIOD-> ODR hund */
+    /* Not change anything */
+    GPIOD -> ODR = hund << 0;
+}

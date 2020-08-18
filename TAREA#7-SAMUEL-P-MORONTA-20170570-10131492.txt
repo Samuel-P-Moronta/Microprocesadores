@@ -1,0 +1,252 @@
+#include "stm32f10x.h"
+#include <stdbool.h>
+//=============================================================================
+/*
+ SAMUEL P. MORONTA
+ ID : 20170570/10131492
+ TAREA: #7
+
+*/
+//=============================================================================
+/*Prototype of functions */
+void regConfi(void);
+void setTimer(void);
+int send_IDR(GPIO_TypeDef *port, volatile uint32_t N);
+int sendAction(GPIO_TypeDef *port, volatile uint32_t N,unsigned int x);
+void timerCounter(unsigned int x);
+void TIM2_IRQHandler(void);
+void secOne(void);
+void moveCenter(void);
+void timerCounter(unsigned int x);
+
+//_____________________________________________________________________________________
+/*A utilizar a lo largo del programa*/
+#define PIN_0               0x00000001
+#define PIN_8               0x00000100
+#define PIN_15              0x00008000
+#define PIN_15_8            0x00008100
+
+/*A utilizar a lo largo del programa*/
+#define GPIO_PIN_0                 ((uint16_t)0x0001)  /* Pin 0 selected    */
+#define GPIO_PIN_1                 ((uint16_t)0x0002)  /* Pin 1 selected    */
+#define GPIO_PIN_AUX               ((uint16_t)0x0003)  /* Pin 0 selected    */
+#define GPIO_PIN_2                 ((uint16_t)0x0004)  /* Pin 2 selected    */
+#define GPIO_PIN_3                 ((uint16_t)0x0008)  /* Pin 3 selected    */
+#define GPIO_PIN_4                 ((uint16_t)0x0010)  /* Pin 4 selected    */
+#define GPIO_PIN_5                 ((uint16_t)0x0020)  /* Pin 5 selected    */
+#define GPIO_PIN_6                 ((uint16_t)0x0040)  /* Pin 6 selected    */
+#define GPIO_PIN_7                 ((uint16_t)0x0080)  /* Pin 7 selected    */
+#define GPIO_PIN_8                 ((uint16_t)0x0100)  /* Pin 8 selected    */
+#define GPIO_PIN_9                 ((uint16_t)0x0200)  /* Pin 9 selected    */
+#define GPIO_PIN_10                ((uint16_t)0x0400)  /* Pin 10 selected   */
+#define GPIO_PIN_11                ((uint16_t)0x0800)  /* Pin 11 selected   */
+#define GPIO_PIN_12                ((uint16_t)0x1000)  /* Pin 12 selected   */
+#define GPIO_PIN_13                ((uint16_t)0x2000)  /* Pin 13 selected   */
+#define GPIO_PIN_14                ((uint16_t)0x4000)  /* Pin 14 selected   */
+#define GPIO_PIN_15                ((uint16_t)0x8000)  /* Pin 15 selected   */
+#define GPIO_PIN_All               ((uint16_t)0xFFFF)  /* All pins selected */
+#define PIN_3                      ((uint16_t)0x7)
+
+
+#define OUTPUT_PP           0x22222222 /*Output Push-Pull a 2 Mhz*/
+#define INPUT_F             0x44444444 /*Float Input a 2Mhz*/
+#define ALL_PORT_ON         0xFF       /*Encender todos los puertos*/
+#define SHIFT_LEFT          GPIOA->ODR<<1
+#define SHIFT_RIGHT         GPIOA->ODR>>1
+
+unsigned int typePin = 0; /*Controls the sequences*/
+unsigned int num = 0; /*Simulation of an iterator as for loop*/
+unsigned int val = 0; /*Simulation of an iterator as for loop*/
+unsigned int count = 0; /*Simulation of an iterator as for loop*/
+
+ uint16_t arrNum[8] = {
+ 0b0000000110000000,
+ 0b0000001001000000,
+ 0b0000010000100000,
+ 0b0000100000010000,
+ 0b0001000000001000,
+ 0b0010000000000100,
+ 0b0100000000000010,
+ 0b1000000000000001,
+ };
+
+//_____________________________________________________________________________________
+
+int main(void) {
+
+
+ regConfi(); /*Call function for configure RCC register*/
+ setTimer();
+
+    while(1) {
+        /*NOTHING*/
+       
+    }
+}
+void regConfi(void){
+    /*Clocks enable [A,B,C,D,E,F]*/
+    RCC->APB2ENR = ALL_PORT_ON;
+    
+    GPIOB->CRL = INPUT_F;
+    
+    GPIOA->CRL = OUTPUT_PP;
+    GPIOA->CRH = OUTPUT_PP;
+    
+    GPIOA->ODR = 0b1;
+}
+void setTimer(void){
+    /*Enable Interrupt*/
+    TIM2->DIER |= TIM_DIER_UIE; 
+    /*Cloks Enable*/
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN; 
+    /*Set prescaler to  MAX VALUE*/
+    TIM2->PSC = 65535;
+    /* Auto reload value 20*/
+    TIM2->ARR = 20;
+    /*Enable Timer*/
+	TIM2->CR1 = TIM_CR1_CEN; 
+    
+    NVIC_EnableIRQ(TIM2_IRQn);
+}
+
+/*IDR FUNCTION to send Action on PORT */
+int send_IDR(GPIO_TypeDef *port, volatile uint32_t N){
+
+    if(port == GPIOA){
+            return  GPIOA->IDR & N;
+    }
+    if(port == GPIOB){
+            return  GPIOB->IDR & N;
+    }
+    if(port == GPIOC){
+            return  GPIOC->IDR & N;
+    }
+    return 0;
+}
+/*Send Action for ODR or IDR register*/
+int sendAction(GPIO_TypeDef *port, volatile uint32_t N,unsigned int x){
+    
+    if(x == 0){
+        if(port == GPIOA){
+            return  GPIOA->ODR = N;
+        }
+        if(port == GPIOB){
+            return  GPIOB->ODR = N;
+        }
+        if(port == GPIOC){
+            return  GPIOC->ODR = N;
+        }
+    }
+    if(x == 1){
+        if(port == GPIOA){
+            return  GPIOA->IDR = N;
+        }
+        if(port == GPIOB){
+            return  GPIOB->IDR = N;
+        }
+        if(port == GPIOC){
+            return  GPIOC->IDR = N;
+        }
+    }
+    
+    return 0;
+}
+/* Function to change the speed*/
+
+void timerCounter(unsigned int x) {
+    /*Send Action Port B, PIN, and the type of register setting
+      ODR or IDr*/
+    if(sendAction(GPIOB,x,1)){
+       /*Set ARR value to 30*/
+       TIM2 -> ARR = 30;   
+    }
+    else{
+        /*Set Value to 50*/
+        if(GPIOB-> IDR != x){
+            TIM2 -> ARR = 50;
+        }
+    }
+}
+/*First sequence of the problem*/
+void secOne(void){
+
+    if(num>29){
+       num = 0;
+    }
+    if(num < 15){
+        /*Move left*/
+       sendAction(GPIOA,SHIFT_LEFT,0);
+    }
+    if(num > 14){
+        /*Move right*/
+        sendAction(GPIOA,SHIFT_RIGHT,0);
+                    
+    }
+    num+=1; 
+    
+}
+/*Second sequence of the problem*/
+void moveCenter(void){
+    /*if UIF flag is set*/
+    if(TIM2->SR & (TIM_SR_UIF)){
+        /*clear UIF flag*/
+        TIM2->SR &= ~(TIM_SR_UIF);
+        /*Send Action to PORT A array on ODR register*/
+        sendAction(GPIOA,arrNum[val],0);
+        /*Start the secuence, from [<-9:8->]*/
+        if(count == 0 && val < 8){
+            val+=1;
+            if(!(val<8)){
+                /*Count will be 1*/
+                count = 1;
+            }
+        }
+        if(count == 1 && val > 0){
+            val-=1;
+            if(!(val>0)){
+                /*Count will be 0*/
+                count = 0;
+            }
+        }
+    }
+}
+/*Interrup for TIM2*/
+void TIM2_IRQHandler(void){
+    /*Ping 0, Port B is preesed we have pin 0 enable*/
+    if(send_IDR(GPIOB,GPIO_PIN_0)){
+            /*typePin will be 1*/
+            typePin = 1;
+    }
+    /*While type pin == 1, we have the first sequence*/
+    while(typePin == 1|| typePin == 2){
+          /*if UIF flag is set*/
+          if(TIM2->SR & (TIM_SR_UIF)){
+             /*clear UIF flag*/
+             TIM2->SR &= ~(TIM_SR_UIF);
+             /*Call first sequence*/
+             secOne();
+             /*Call timerCounter for change the speed frecuency*/
+             timerCounter(GPIO_PIN_AUX);
+             
+             if(!(send_IDR(GPIOB,GPIO_PIN_0))){
+                typePin = 2;
+             }
+             if(send_IDR(GPIOB,GPIO_PIN_0) && typePin == 2){
+                typePin = 3;
+             }
+             
+         }
+    } 
+     while(typePin == 3|| typePin == 4){
+           moveCenter();
+           if(!(send_IDR(GPIOB,GPIO_PIN_0))){
+                typePin = 4;
+           }
+           if(send_IDR(GPIOB,GPIO_PIN_0) && typePin == 4){
+                /*Reset typePin for init the sequences again*/
+                typePin = 0;
+           }
+     }
+}
+
+

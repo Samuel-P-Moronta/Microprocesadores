@@ -1,0 +1,119 @@
+#include <stm32f10x.h> 
+#include <stdbool.h>
+
+/*
+    NOMBRE     : SAMUEL P. MORONTA 
+    MATRICULA  : 2017-0570
+    ID         : 10131492
+    
+*/
+
+/*Prototipo de funciones */
+void readReg(void);
+void config_USART_AS(void);
+void delay(unsigned int TIME);
+void USART1_IRQHandler(void);
+void sendOnUSART(unsigned chr);
+
+/*Defines*/
+#define BAUDIO                   9600
+#define PP                       0x000000F0
+#define USART_RX_GPIO            GPIOB
+#define USART_RX_PIN             10
+#define USART_TX_GPIO            GPIOB
+#define USART_TX_PIN             9
+#define PARIDAD_PAR              0x200
+#define BIT_1                    0x0000
+
+/*Variables globales*/
+char M;
+
+
+int main(void) 
+{
+	
+	/*Llamando configuracion Asincrona*/
+	config_USART_AS();
+    /*Para mantener el bloque de codigo de forma indefinida*/
+	while (1) 
+	{
+        /*Ejecutar el bloque de instrucciones mientras se
+          cumple la condicion*/
+        do{
+            if(USART1 -> SR & USART_SR_RXNE){
+               /*Interrupcion el el IRQ*/
+               USART1_IRQHandler();
+               /*Enviando un caracter M en el USART*/
+               sendOnUSART(M);
+            }
+        }while(USART1 -> SR & USART_SR_RXNE);
+
+
+	}
+}
+void readReg(void){
+   
+    /*Habilitando el relog del puerto A */  
+    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN; 
+    /*Puerto Como salida a 2 Mhz*/
+    GPIOA->CRL |= 0x22222222; 
+    GPIOA->CRH |= 0x22222222; 
+}
+void delay(unsigned int TIME){
+    for(unsigned int i = 0; i < TIME; i++);
+}
+void config_USART_AS(void){
+
+    /*Habilitando el relog del puerto B */
+    RCC -> APB2ENR |= RCC_APB2ENR_IOPBEN;
+
+    /*Habilitando el relog del USART1*/
+    RCC -> APB2ENR |= RCC_APB2ENR_USART1EN;
+
+    /*Puerto A configurado como Transmisor (H-0-D) a 10Mhz */
+    USART_TX_GPIO->CRH |= PP;
+    
+    /*USART configurado como Paridad par */
+    USART1->CR1 |= PARIDAD_PAR; 
+    
+    /* Obtenemos la frecuencia con la que trabaja
+       el micro, y lo dividimos entre los Baudios
+       que queremos, en este caso 9600
+    */
+    
+    USART1-> BRR = (SystemCoreClock / BAUDIO); //SystemCoreClock = 72Mhz
+    
+    /*Modo Half D*/
+    USART1 -> CR3 |= USART_CR3_HDSEL; 
+    
+    /*Habilitando el USART*/
+    USART1 -> CR1 |= USART_CR1_UE;
+    /*Modo Transmisor*/
+    USART1 -> CR1 |= USART_CR1_TE;
+    /*Modo Receptor*/
+    USART1 -> CR1 |= USART_CR1_RE; 
+    
+    /*Configuracion 1 BIT de Parada */
+    USART1 -> CR2 |= BIT_1;
+    
+    /*Habilitar interrupcion para el USART1*/
+    NVIC_EnableIRQ(USART1_IRQn);
+}
+/*SetUp interrupcion para USART1*/
+
+void USART1_IRQHandler(void){
+
+    if(USART1->SR & USART_SR_RXNE){
+        readReg();
+        char temp = USART1->DR;
+        USART1->DR = temp;
+        while(!(USART1 ->SR & USART_SR_TC));
+    }
+}
+void sendOnUSART(unsigned ch)
+{
+    /*Mientras no no se encuentra limpio, pues escribo y envio*/
+	while(!(USART2->SR & USART_SR_TXE)); 
+    /*Escritura*/
+	USART2->DR = ch;
+}

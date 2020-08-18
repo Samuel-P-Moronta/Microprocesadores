@@ -1,0 +1,304 @@
+#include "stm32f10x.h"
+#include <math.h>
+#include <stdbool.h>
+#include "GPIO_STM32F10x.h"
+
+//=============================================================================
+/*
+    SAMUEL P. MORONTA
+    ID   : 20170570/10131492
+    TAREA: 6
+*/
+//=============================================================================
+
+/********************************************************************/
+void variable_off(void);
+void readReg(void);
+void set_PWM_TIMER(void);
+void set_ADC(void);
+void delay(void);
+void sendComand(char m);
+int sendAction(GPIO_TypeDef *port, volatile uint16_t N);
+int send_IDR(volatile uint16_t M);
+void initLCD(volatile uint16_t m, uint16_t n);
+void lcdClear(void);
+void receiveLCD(void);
+void printLCD(volatile uint16_t m);
+int getDigits(long long num);
+void lcd_puts(unsigned char* data, unsigned char nBytes);
+void keypad_read(unsigned int tecla, uint16_t num1, uint16_t num2);
+void initProgram(void);
+
+/*A utilizar a lo largo del programa*/
+#define GPIO_PIN_0                 ((uint16_t)0x0001)  /* Pin 0 selected    */
+#define GPIO_PIN_1                 ((uint16_t)0x0002)  /* Pin 1 selected    */
+#define GPIO_PIN_2                 ((uint16_t)0x0004)  /* Pin 2 selected    */
+#define GPIO_PIN_3                 ((uint16_t)0x0008)  /* Pin 3 selected    */
+#define GPIO_PIN_4                 ((uint16_t)0x0010)  /* Pin 4 selected    */
+#define GPIO_PIN_5                 ((uint16_t)0x0020)  /* Pin 5 selected    */
+#define GPIO_PIN_6                 ((uint16_t)0x0040)  /* Pin 6 selected    */
+#define GPIO_PIN_7                 ((uint16_t)0x0080)  /* Pin 7 selected    */
+#define GPIO_PIN_8                 ((uint16_t)0x0100)  /* Pin 8 selected    */
+#define GPIO_PIN_9                 ((uint16_t)0x0200)  /* Pin 9 selected    */
+#define GPIO_PIN_10                ((uint16_t)0x0400)  /* Pin 10 selected   */
+#define GPIO_PIN_11                ((uint16_t)0x0800)  /* Pin 11 selected   */
+#define GPIO_PIN_12                ((uint16_t)0x1000)  /* Pin 12 selected   */
+#define GPIO_PIN_13                ((uint16_t)0x2000)  /* Pin 13 selected   */
+#define GPIO_PIN_14                ((uint16_t)0x4000)  /* Pin 14 selected   */
+#define GPIO_PIN_15                ((uint16_t)0x8000)  /* Pin 15 selected   */
+#define GPIO_PIN_All               ((uint16_t)0xFFFF)  /* All pins selected */
+#define PIN_3                      ((uint16_t)0x7)
+
+
+#define OUTPUT_PP           0x33333333 /*Output Push-Pull a 50 Mhz*/
+#define INPUT_F             0x44444444 /*Float Input a 2Mhz*/
+#define ALL_PORT_ON         0xFF       /*Encender todos los puertos*/
+#define MODE_ON             0x00000000
+#define OPEN_MODE           0b0000000110
+#define WRITE_MODE          0b1000000000
+#define WAIT_MODE           0b0000001110
+
+
+//****************************LCD*********************************************//
+#define CLEAR_DISPLAY   	0x01	//0b00000001
+
+int count = 0;
+
+int val   = 0;
+char data;
+unsigned int num1 = 0;
+unsigned int num2 = 0;
+
+unsigned int key = 0;
+unsigned int lib = 0;
+unsigned int cant = 0;
+unsigned int cantB = 0;
+unsigned int libB = 0;
+unsigned int oB = 0;
+
+
+//_____________________________________________________________________________________
+int main(){
+
+    readReg();
+    initLCD(OPEN_MODE,WAIT_MODE);
+    set_PWM_TIMER();
+    sendComand(CLEAR_DISPLAY);
+    
+    
+    while(1){
+        switch(sendAction(GPIOA,GPIO_PIN_1)){
+            /* Si no esta encendido, reseteamos todas las vairables*/
+            case 0: variable_off(); break;
+            /* Si esta encendido inicializamos el programa*/
+            case 1: initProgram(); break;
+            default: break;
+ 
+        }
+    }
+}
+void variable_off(void){
+         key = 0;
+         lib = 0;
+         cant = 0;
+         cantB = 0;
+         libB = 0;
+         oB = 0;
+    
+}
+void readReg(void){
+    /*Clocks enable [A,B,C,D,E,F]*/
+    RCC->APB2ENR = ALL_PORT_ON;
+    GPIOA->CRH |= INPUT_F;
+    GPIOB->CRH |= OUTPUT_PP;
+}
+void set_PWM_TIMER(void)
+{
+    /*Cloks Enable*/
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN; 
+    /*Full TIM3 remap*/
+    AFIO->MAPR = AFIO_MAPR_TIM2_REMAP;
+    /*PWM mode is On*/
+	TIM2->CCMR1 |= 0x60; 
+	TIM2->CCMR1 |= 0x8; 
+    /*Enable Timer*/
+	TIM2->CR1 = TIM_CR1_CEN; 
+	TIM2->EGR |= 0x1; 
+    /*Start PWM duty for channel 3*/
+	TIM2->CCER |= 0x0; 
+	TIM2->CCER |= 0x1; 
+    /*Start PWM duty for channel 4*/
+	TIM2->CCR1 |= 500; 
+    /*Set prescaler to  24 000 (PSC + 1)*/
+	TIM2->PSC = 239;
+    /* Auto reload value 500*/
+    TIM3->ARR = 500; //
+    
+}
+void set_ADC(void){
+
+    /* PCLK2 divided by 6 */
+    RCC->CFGR |= RCC_CFGR_ADCPRE_DIV6;
+    /*Habilitando el relog del -ADC1--------AFIO------------ y puerto A*/
+    RCC->APB2ENR |= RCC_APB2ENR_ADC1EN | RCC_APB2ENR_AFIOEN | RCC_APB2ENR_IOPAEN;
+    
+    ADC1->CR1 = MODE_ON;
+
+    /*Converter ON / OFF */
+    ADC1->CR2 |= ADC_CR2_ADON;
+    /*A/D Calibration */
+    ADC1->CR2 |= ADC_CR2_CAL;
+    
+}
+/*Function to delay*/
+void delay(void){
+    for(unsigned int i = 0; i < 20000; i++);
+}
+/*INIT lcd*/
+
+void initLCD(volatile uint16_t m, uint16_t n){
+
+    GPIOB->ODR |= m;
+    GPIOB->ODR &= n; 
+}
+
+/*Send comand to LCD
+  ->CLEAR_LCD
+  ->WRITE_MODE
+  ->MODE_ON
+  ->OPEN_MODE
+  ->Puts String
+  ->DISPLAY_ON
+  ->DISPLAY_OFF
+*/
+
+void sendComand(char m){
+    /*Send ODR M*/
+    GPIOB->ODR = m;
+    /*RS = 0*/
+    GPIOB->ODR &= ~(1UL << 8); 
+    /*Enable = 1*/
+    GPIOB->ODR |= (1UL << 9);  
+    /*Wait for */
+    delay();
+    /*Enable = 0*/
+    GPIOB->ODR &= ~(1UL << 9); 
+    
+}
+int sendAction(GPIO_TypeDef *port, volatile uint16_t N){
+
+    if(port == GPIOB){
+        return  GPIOB->ODR = N;
+    }
+    if(port  == GPIOA){
+         return GPIOA->IDR = N;
+    }
+    return 0;
+}
+/*IDR FUNCTION*/
+int send_IDR(volatile uint16_t M){
+
+    return GPIOA->IDR & M;
+}
+/*Clear LCD*/
+void lcdClear(void){
+    /*Send comand (CLEAR DISPLAY)*/
+    sendComand(CLEAR_DISPLAY);
+}
+void receiveLCD(void){
+    /*OPEN_MODE is on*/
+    sendComand(OPEN_MODE);
+}
+/* Funcion para imprimir en la LCD*/
+void printLCD(volatile uint16_t m){
+
+    lcdClear();
+    /*WRITE_MODE is On*/
+    receiveLCD();
+    
+    for(int i = (getDigits(m)); i>= 0; i--){
+        /*WRITE_MODE active*/
+        sendComand(WRITE_MODE);
+        /*Send Data to LCD*/
+        sendComand(data);
+    }
+}
+/* Get the number of digits in a integer number*/
+int getDigits(long long num){
+    /*Return de number of digits*/
+    return count = (num == 0)? 1: (log10(num) + 1);
+}
+/* Send a String to the LCD*/
+void lcd_puts(unsigned char* data, unsigned char nBytes){	
+	register unsigned char i=0;
+
+	for(i=0; i<nBytes; i++){	
+		sendComand(data[i]);
+	}
+}
+/* function to read the pressed keys*/
+void keypad_read(unsigned int key, uint16_t num1, uint16_t num2){
+
+    /* Wait until two keys are no pressed */
+    while(key < 2){
+        /*ROW 1*/
+        sendAction(GPIOB,GPIO_PIN_12);
+        
+        switch(send_IDR(PIN_3)){
+            /*ROW 1 PRESSED*/
+            case GPIO_PIN_12:  if(key == 0){num1 == 1; printLCD(num1); key++;} else if(key == 1){num2 == 1; printLCD(num2); key = 1;} break;
+            /*ROW 2 PRESSED*/
+            case GPIO_PIN_1:   if(key == 0){num1 == 4; printLCD(num1); key++;} else if(key == 1){num2 == 4; printLCD(num2);} break;
+            /*ROW 3 PRESSED*/
+            case GPIO_PIN_2:   if(key == 0){num1 == 7; printLCD(num1); key++;} else if(key == 1){num2 == 7; printLCD(num2);} break;
+            default: break;                       
+        }
+        sendAction(GPIOB, GPIO_PIN_1);
+       
+        switch(send_IDR(PIN_3)){
+            /*ROW 1 PRESSED*/
+            case GPIO_PIN_12:  if(key == 0){num1 == 2; printLCD(num1); key++;} else if(key == 1){num2 == 2; printLCD(num2); key = 2;} break;
+            /*ROW 2 PRESSED*/
+            case GPIO_PIN_1:   if(key == 0){num1 == 5; printLCD(num1); key++;} else if(key == 1){num2 == 5; printLCD(num2);} break;
+            /*ROW 3 PRESSED*/
+           case GPIO_PIN_2:   if(key == 0){num1 == 8; printLCD(num1); key++;} else if(key == 1){num2 == 8; printLCD(num2);} break;
+            default: break;                       
+        }
+        sendAction(GPIOB, GPIO_PIN_2);
+        
+        switch(send_IDR(PIN_3)){
+            /*ROW 1 PRESSED*/
+            case GPIO_PIN_12:  if(key == 0){num1 == 3; printLCD(num1); key++;} else if(key == 1){num2 == 3; printLCD(num2); key = 3;} break;
+            /*ROW 2 PRESSED*/
+            case GPIO_PIN_1:   if(key == 0){num1 == 6; printLCD(num1); key++;} else if(key == 1){num2 == 6; printLCD(num2);} break;
+            /*ROW 3 PRESSED*/
+            case GPIO_PIN_2:   if(key == 0){num1 == 9; printLCD(num1); key++;} else if(key == 1){num2 == 9; printLCD(num2);} break;
+            default: break;                       
+        }
+        
+    }
+}
+/*Funcion para iniciar todas las pautas de los requerimientos
+  de la tarea*/
+void initProgram(void){
+    set_ADC();
+       
+        do{
+            if((cant == 0) && (lib != 4095)){
+                keypad_read(key,num1,num2);
+                cant = (num1*10)+num2;
+            }
+            printLCD(cant);
+            delay();
+            key = 0;
+            num1 = 0;
+            num2 = 0;
+            do{
+                if(lib == 0){
+                    oB = ADC1->DR;
+                }
+            }while(lib == 0);
+            
+        }while(key < 3);
+        
+}
